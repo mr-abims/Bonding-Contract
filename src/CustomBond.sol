@@ -25,9 +25,6 @@ contract CustomBond is Ownable {
     IERC20 immutable payoutToken; // token paid for principal
     IERC20 immutable principalToken; // inflow token
     ITreasury immutable customTreasury; // pays for and receives principal
-    address immutable olympusDAO;
-    address olympusTreasury; // receives fee
-
     uint public totalPrincipalBonded;
     uint public totalPayoutGiven;
     
@@ -40,7 +37,6 @@ contract CustomBond is Ownable {
     uint public totalDebt; // total value of outstanding bonds; used for pricing
     uint public lastDecay; // reference block for debt decay
 
-    address immutable subsidyRouter; // pays subsidy in OHM to custom treasury
     uint payoutSinceLastSubsidy; // principal accrued since subsidy paid
     
     /* ======== STRUCTS ======== */
@@ -82,10 +78,7 @@ contract CustomBond is Ownable {
         address _customTreasury, 
         address _payoutToken, 
         address _principalToken, 
-        address _olympusTreasury,
-        address _subsidyRouter, 
         address _initialOwner, 
-        address _olympusDAO,
         uint[] memory _tierCeilings, 
         uint[] memory _fees
     ) {
@@ -95,14 +88,8 @@ contract CustomBond is Ownable {
         payoutToken = IERC20( _payoutToken );
         require( _principalToken != address(0) );
         principalToken = IERC20( _principalToken );
-        require( _olympusTreasury != address(0) );
-        olympusTreasury = _olympusTreasury;
-        require( _subsidyRouter != address(0) );
-        subsidyRouter = _subsidyRouter;
         require( _initialOwner != address(0) );
         policy = _initialOwner;
-        require( _olympusDAO != address(0) );
-        olympusDAO = _olympusDAO;
         require(_tierCeilings.length == _fees.length, "tier length and fee length not the same");
 
         for(uint i; i < _tierCeilings.length; i++) {
@@ -188,26 +175,6 @@ contract CustomBond is Ownable {
             lastBlock: block.number
         });
     }
-
-    /**
-     *  @notice change address of Olympus Treasury
-     *  @param _olympusTreasury uint
-     */
-    function changeOlympusTreasury(address _olympusTreasury) external {
-        require( msg.sender == olympusDAO, "Only Olympus DAO" );
-        olympusTreasury = _olympusTreasury;
-    }
-
-    /**
-     *  @notice subsidy controller checks payouts since last subsidy and resets counter
-     *  @return payoutSinceLastSubsidy_ uint
-     */
-    function paySubsidy() external returns ( uint payoutSinceLastSubsidy_ ) {
-        require( msg.sender == subsidyRouter, "Only subsidy controller" );
-
-        payoutSinceLastSubsidy_ = payoutSinceLastSubsidy;
-        payoutSinceLastSubsidy = 0;
-    }
     
     /* ======== USER FUNCTIONS ======== */
     
@@ -243,13 +210,7 @@ contract CustomBond is Ownable {
             deposited into the treasury, returning (_amount - profit) payout token
          */
         principalToken.safeTransferFrom( msg.sender, address(this), _amount );
-        principalToken.approve( address(customTreasury), _amount );
-        customTreasury.deposit( address(principalToken), _amount, payout );
-        
-        if ( fee != 0 ) { // fee is transferred to dao 
-            payoutToken.transfer(olympusTreasury, fee);
-        }
-        
+      
         // total debt is increased
         totalDebt = totalDebt.add( value );
                 
